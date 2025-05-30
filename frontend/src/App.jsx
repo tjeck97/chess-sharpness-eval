@@ -15,43 +15,46 @@ export default function App() {
 
   const evaluatePosition = async (fen) => {
     const encodedFen = encodeURIComponent(fen)
-    try {
-      const res = await axios.get(`/api/evaluate?fen=${encodedFen}`)
-      setEvalScore(res.data.eval)
 
-      const turn = res.data.turn // 'white' or 'black'
-
-      if (turn === 'white') {
-        setSharpnessWhite(res.data.difficulty)
-      } else {
-        setSharpnessBlack(res.data.difficulty)
-      }
-    } catch (err) {
-      console.error('API error:', err)
-    }
-  }
-
-  const makeMove = async (move) => {
-    const gameCopy = new Chess(game.fen())
-    const result = gameCopy.move(move)
-    if (result) {
-      setGame(gameCopy)
-      const fen = encodeURIComponent(gameCopy.fen())
-      try {
-        const res = await axios.get(`/api/evaluate?fen=${fen}`)
+    // Fetch eval immediately
+    axios
+      .get(`/api/eval?fen=${encodedFen}`)
+      .then((res) => {
         setEvalScore(res.data.eval)
+      })
+      .catch((err) => {
+        console.error('Eval API error:', err)
+      })
 
+    // Fetch sharpness in parallel
+    axios
+      .get(`/api/sharpness?fen=${encodedFen}`)
+      .then((res) => {
         const turn = res.data.turn
         if (turn === 'white') {
           setSharpnessWhite(res.data.difficulty)
         } else {
           setSharpnessBlack(res.data.difficulty)
         }
-      } catch (err) {
-        console.error('API error:', err)
-      }
+      })
+      .catch((err) => {
+        console.error('Sharpness API error:', err)
+      })
+  }
+
+  const makeMove = async (move) => {
+    const gameCopy = new Chess(game.fen())
+    const result = gameCopy.move(move)
+
+    if (result) {
+      setGame(gameCopy)
+
+      // Trigger separate eval and sharpness requests
+      evaluatePosition(gameCopy.fen())
+
       return true
     }
+
     return false
   }
 
@@ -91,7 +94,7 @@ export default function App() {
       <div
         ref={boardRef}
         onDragOver={(e) => e.preventDefault()}
-        onPieceDrop={handleTrayDrop}
+        onDrop={handleTrayDrop}
         style={{ maxWidth: 500, margin: 'auto' }}
       >
         <Chessboard
@@ -101,42 +104,21 @@ export default function App() {
             if (!setupMode) return makeMove({ from: source, to: target })
 
             const piece = game.get(source)
-
             const gameCopy = new Chess(game.fen())
-            gameCopy.clear()
-
-            const oldBoard = game.board()
-            for (let rank = 0; rank < 8; rank++) {
-              for (let file = 0; file < 8; file++) {
-                const square = 'abcdefgh'[file] + (rank + 1)
-                const sqPiece = game.get(square)
-
-                if (!sqPiece) continue
-
-                if (square === source) continue
-                if (square === target) continue
-
-                gameCopy.put(sqPiece, square)
-              }
-            }
+            gameCopy.remove(source)
 
             if (piece) {
               gameCopy.put(piece, target)
-            } else {
-              try {
-                const trayPiece = JSON.parse(
-                  window.event.dataTransfer.getData('piece')
-                )
-                if (trayPiece?.type && trayPiece?.color) {
-                  gameCopy.put(trayPiece, target)
-                }
-              } catch (e) {
-                console.error('Error placing piece from tray:', e)
-              }
             }
 
             setGame(gameCopy)
             return true
+          }}
+          onSquareRightClick={(square) => {
+            if (!setupMode) return
+            const gameCopy = new Chess(game.fen())
+            gameCopy.remove(square)
+            setGame(gameCopy)
           }}
         />
       </div>
@@ -180,18 +162,17 @@ export default function App() {
       )}
       <div style={{ marginTop: 20 }}>
         <p>
-          <strong>Eval:</strong>{' '}
-          {evalScore !== null ? `${evalScore} (White perspective)` : '...'}
+          <strong>Eval:</strong> {evalScore !== null ? `${evalScore}` : '...'}
         </p>
         <p>
           <strong>Sharpness:</strong>
         </p>
         <ul>
           <li>
-            White: {sharpnessWhite !== null ? `${sharpnessWhite} / 100` : '...'}
+            White: {sharpnessWhite !== null ? `${sharpnessWhite}` : '...'}
           </li>
           <li>
-            Black: {sharpnessBlack !== null ? `${sharpnessBlack} / 100` : '...'}
+            Black: {sharpnessBlack !== null ? `${sharpnessBlack}` : '...'}
           </li>
         </ul>
       </div>

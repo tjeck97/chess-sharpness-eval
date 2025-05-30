@@ -90,25 +90,33 @@ def compute_difficulty(engine, board):
 
 
 
-@app.get("/api/evaluate")
-def evaluate(fen: str = Query(...)):
+@app.get("/api/eval")
+def compute_eval(fen: str = Query(...)):
     board = chess.Board(fen)
     if not os.path.exists(STOCKFISH_PATH):
         return {"error": "Stockfish not found at path."}
 
     with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-        # Eval for player to move
-        info = engine.analyse(board, chess.engine.Limit(depth=DEPTH), multipv=5)
+        info = engine.analyse(board, chess.engine.Limit(depth=DEPTH), multipv=1)
         eval_cp = info[0]["score"].white().score(mate_score=10000)
         eval_pawns = eval_cp / 100 if eval_cp is not None else None
 
-        # Difficulty for player to move
-        difficulty_score, _ = compute_difficulty(engine, board)
-
         return {
             "eval": eval_pawns,
-            "turn": "white" if board.turn == chess.WHITE else "black",
-            "difficulty": difficulty_score
+            "turn": "white" if board.turn == chess.WHITE else "black"
+        }
+
+@app.get("/api/sharpness")
+def compute_sharpness(fen: str = Query(...)):
+    board = chess.Board(fen)
+    if not os.path.exists(STOCKFISH_PATH):
+        return {"error": "Stockfish not found at path."}
+
+    with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
+        difficulty_score, _ = compute_difficulty(engine, board)
+        return {
+            "difficulty": difficulty_score,
+            "turn": "white" if board.turn == chess.WHITE else "black"
         }
 
 
