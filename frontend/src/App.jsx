@@ -32,9 +32,9 @@ export default function App() {
       .then((res) => {
         const turn = res.data.turn
         if (turn === 'white') {
-          setSharpnessWhite(res.data.difficulty)
+          setSharpnessWhite(res.data.sharpness)
         } else {
-          setSharpnessBlack(res.data.difficulty)
+          setSharpnessBlack(res.data.sharpness)
         }
       })
       .catch((err) => {
