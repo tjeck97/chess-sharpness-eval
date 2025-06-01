@@ -169,13 +169,13 @@ def compute_sharpness(engine, board: chess.Board):
         worst_good_score = min(good_scores)
         best_bad_score = max(bad_scores)
         dropoff_cp = worst_good_score - best_bad_score
-        dropoff_factor = 1 + (dropoff_cp / 200)
+        dropoff_factor = 1 + (dropoff_cp / 300)
     else:
         dropoff_factor = 1
 
     raw_sharpness = 1/scarcity * depth_difficulty * dropoff_factor
 
-    sharpness = round(min(raw_sharpness, 1000), 2)
+    sharpness = round(min(raw_sharpness, 500), 2)
 
     print("\n[SUMMARY]")
     print(f"- Good moves: {len(good_move_depths)}")
