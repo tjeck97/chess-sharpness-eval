@@ -168,8 +168,8 @@ def compute_sharpness(engine, board: chess.Board):
     if good_scores and bad_scores:
         worst_good_score = min(good_scores)
         best_bad_score = max(bad_scores)
-        dropoff_cp = worst_good_score - best_bad_score
-        dropoff_factor = 1 + (dropoff_cp / 300)
+        dropoff_cp = min(1000, worst_good_score - best_bad_score)
+        dropoff_factor = 1 + (dropoff_cp / 200)
     else:
         dropoff_factor = 1
 
