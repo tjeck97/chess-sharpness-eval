@@ -14,7 +14,7 @@ export default function App() {
   const [isBlackSharpnessStale, setIsBlackSharpnessStale] = useState(false)
   const [setupMode, setSetupMode] = useState(false)
   const [importedFen, setImportedFen] = useState('')
-  const [turn, setTurn] = useState('w')
+  const [maxDepth, setMaxDepth] = useState(10)
   const boardRef = useRef(null)
 
   const clearAnalysis = () => {
@@ -33,12 +33,12 @@ export default function App() {
       .catch((err) => console.error('Eval API error:', err))
   }
 
-  const evaluateSharpness = (fen, sideJustMoved) => {
+  const evaluateSharpness = (fen, sideToUpdate, depth) => {
     const encodedFen = encodeURIComponent(fen)
     axios
-      .get(`/api/sharpness?fen=${encodedFen}`)
+      .get(`/api/sharpness?fen=${encodedFen}&depth=${depth}`)
       .then((res) => {
-        if (sideJustMoved === 'white') {
+        if (sideToUpdate === 'white') {
           setSharpnessBlack(res.data.sharpness)
           setIsBlackSharpnessStale(false)
         } else {
@@ -54,16 +54,16 @@ export default function App() {
     const result = gameCopy.move(move)
 
     if (result) {
-      const prevTurn = game.turn() // who just moved
+      const prevTurn = game.turn()
       const fen = gameCopy.fen()
       setGame(gameCopy)
 
       if (prevTurn === 'w') {
         setIsBlackSharpnessStale(true)
-        evaluateSharpness(fen, 'white')
+        evaluateSharpness(fen, 'white', maxDepth)
       } else {
         setIsWhiteSharpnessStale(true)
-        evaluateSharpness(fen, 'black')
+        evaluateSharpness(fen, 'black', maxDepth)
       }
 
       evaluateEval(fen)
@@ -73,83 +73,63 @@ export default function App() {
     return false
   }
 
-  const handleTrayDrop = (e) => {
-    if (!setupMode) return
-
-    const rect = boardRef.current.getBoundingClientRect()
-    const squareSize = rect.width / 8
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    const file = Math.floor(x / squareSize)
-    const rank = 7 - Math.floor(y / squareSize)
-    const square = 'abcdefgh'[file] + (rank + 1)
-
-    try {
-      const pieceData = JSON.parse(e.dataTransfer.getData('piece'))
-      const gameCopy = new Chess(game.fen())
-      gameCopy.remove(square)
-      gameCopy.put(pieceData, square)
-
-      const newFen = gameCopy.fen().split(' ')
-      newFen[1] = turn
-      const newGame = new Chess(newFen.join(' '))
-      setGame(newGame)
-    } catch (err) {
-      console.error('Failed to read piece data:', err)
-    }
-  }
-
   const formatSharpness = (val, isStale) => {
     return val !== null ? (isStale ? `${val}…` : val) : '…'
+  }
+
+  const handleCopyFEN = () => {
+    navigator.clipboard.writeText(game.fen()).then(() => {
+      alert('FEN copied to clipboard!')
+    })
   }
 
   return (
     <div style={{ padding: 20 }}>
       <h2>Sharpness Eval Chess</h2>
+
+      {/* FEN Display + Copy Button */}
+      <div style={{ marginBottom: 10 }}>
+        <label>
+          <strong>Current FEN:</strong>
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="text"
+            value={game.fen()}
+            readOnly
+            style={{ width: '70%', fontSize: 12 }}
+          />
+          <button onClick={handleCopyFEN}>Copy</button>
+        </div>
+      </div>
+
+      {/* Main Board and Bars */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'stretch',
           gap: 10,
-          margin: 'auto',
           height: 500
         }}
       >
         <EvalBar evalScore={evalScore} />
-        <div
-          ref={boardRef}
-          onDragOver={(e) => e.preventDefault()
-          }
-          onDrop={handleTrayDrop}
-          style={{ maxWidth: 500, margin: 'auto' }}
-        >
+        <div style={{ maxWidth: 500, margin: 'auto' }}>
           <Chessboard
             position={game.fen()}
             boardWidth={500}
-            onPieceDrop={(source, target) => {
-              if (!setupMode) return makeMove({ from: source, to: target })
-
-              const piece = game.get(source)
-              const gameCopy = new Chess(game.fen())
-              gameCopy.remove(source)
-
-              if (piece) gameCopy.put(piece, target)
-              setGame(gameCopy)
-              return true
-            }}
-            onSquareRightClick={(square) => {
-              if (!setupMode) return
-              const gameCopy = new Chess(game.fen())
-              gameCopy.remove(square)
-              setGame(gameCopy)
-            }}
+            onPieceDrop={(source, target) =>
+              makeMove({ from: source, to: target })
+            }
           />
         </div>
-        <SharpnessBar sharpnessWhite={sharpnessWhite} sharpnessBlack={sharpnessBlack} />
+        <SharpnessBar
+          sharpnessWhite={sharpnessWhite}
+          sharpnessBlack={sharpnessBlack}
+        />
       </div>
 
+      {/* Sharpness Key */}
       <div style={{ marginTop: 20, textAlign: 'center' }}>
         <div
           style={{
@@ -176,13 +156,41 @@ export default function App() {
           <span>High Sharpness</span>
         </div>
       </div>
+      <div style={{ marginTop: 20, textAlign: 'center' }}>
+        <label
+          htmlFor="depthSlider"
+          style={{ fontWeight: 'bold', display: 'block', marginBottom: 6 }}
+        >
+          Max Sharpness Depth: {maxDepth}
+        </label>
+        <input
+          id="depthSlider"
+          type="range"
+          min="4"
+          max="18"
+          value={maxDepth}
+          onChange={(e) => setMaxDepth(parseInt(e.target.value))}
+          style={{ width: 300 }}
+        />
+        <p style={{ fontSize: 12, color: 'orange', marginTop: 6 }}>
+          Higher depth values take significantly longer to compute.
+        </p>
+      </div>
 
       <div style={{ marginTop: 20 }}>
-        <p><strong>Eval:</strong> {evalScore !== null ? `${evalScore}` : '…'}</p>
-        <p><strong>Sharpness:</strong></p>
+        <p>
+          <strong>Eval:</strong> {evalScore !== null ? evalScore : '…'}
+        </p>
+        <p>
+          <strong>Sharpness:</strong>
+        </p>
         <ul>
-          <li>White: {formatSharpness(sharpnessWhite, isWhiteSharpnessStale)}</li>
-          <li>Black: {formatSharpness(sharpnessBlack, isBlackSharpnessStale)}</li>
+          <li>
+            White: {formatSharpness(sharpnessWhite, isWhiteSharpnessStale)}
+          </li>
+          <li>
+            Black: {formatSharpness(sharpnessBlack, isBlackSharpnessStale)}
+          </li>
         </ul>
       </div>
 
@@ -196,7 +204,11 @@ export default function App() {
             setGame(newGame)
             setSetupMode(false)
             evaluateEval(newGame.fen())
-            evaluateSharpness(newGame.fen(), newGame.turn() === 'w' ? 'black' : 'white')
+            evaluateSharpness(
+              newGame.fen(),
+              newGame.turn() === 'w' ? 'black' : 'white',
+              maxDepth
+            )
           }
           clearAnalysis()
         }}
@@ -220,7 +232,11 @@ export default function App() {
                 const newGame = new Chess(importedFen)
                 setGame(newGame)
                 evaluateEval(newGame.fen())
-                evaluateSharpness(newGame.fen(), newGame.turn() === 'w' ? 'black' : 'white')
+                evaluateSharpness(
+                  newGame.fen(),
+                  newGame.turn() === 'w' ? 'black' : 'white',
+                  maxDepth
+                )
                 clearAnalysis()
               } catch (err) {
                 alert('Invalid FEN string')

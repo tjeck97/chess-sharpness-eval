@@ -3,6 +3,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from chess_calcs import get_eval, get_sharpness
 
+MAX_DEPTH = 18
 
 app = FastAPI()
 
@@ -23,9 +24,9 @@ def compute_eval(fen: str = Query(...)):
 
 
 @app.get("/api/sharpness")
-def compute_sharpness(fen: str = Query(...)):
+def compute_sharpness(fen: str = Query(...), depth: int = Query(MAX_DEPTH)):
     try:
-        sharpness_score, turn, top_moves = get_sharpness(fen)
+        sharpness_score, turn, top_moves = get_sharpness(fen, depth)
         return {
             "sharpness": sharpness_score,
             "turn": turn,

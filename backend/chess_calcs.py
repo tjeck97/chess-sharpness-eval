@@ -24,13 +24,13 @@ def get_eval(fen: str) -> Tuple[float, str]:
         return eval_pawns, turn
 
 
-def get_sharpness(fen: str) -> Tuple[float, str, list]:
+def get_sharpness(fen: str, depth: int) -> Tuple[float, str, list]:
     board = chess.Board(fen)
     if not os.path.exists(STOCKFISH_PATH):
         raise FileNotFoundError("Stockfish not found at path.")
 
     with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-        sharpness_score, top_moves = compute_sharpness(engine, board)
+        sharpness_score, top_moves = compute_sharpness(engine, board, depth)
         turn = "white" if board.turn == chess.WHITE else "black"
         return sharpness_score, turn, top_moves
 
@@ -97,7 +97,7 @@ def resolve_move_quality_depth(board: chess.Board, move: chess.Move, max_depth: 
 
 
 
-def compute_sharpness(engine, board: chess.Board):
+def compute_sharpness(engine, board: chess.Board, depth: int):
     try:
         info = engine.analyse(board, chess.engine.Limit(depth=MAX_DEPTH), multipv=MULTIPV)
     except Exception as e:
@@ -126,7 +126,7 @@ def compute_sharpness(engine, board: chess.Board):
         score = entry["score"].relative.score(mate_score=10000)
         delta = abs(score - top_score)
 
-        depth_revealed, label = resolve_move_quality_depth(board, move)
+        depth_revealed, label = resolve_move_quality_depth(board, move, depth)
 
         if label in ("BEST", "GOOD"):
             good_move_depths.append(depth_revealed)
