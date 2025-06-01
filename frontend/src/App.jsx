@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { Chess } from 'chess.js'
 import { Chessboard } from 'react-chessboard'
 import EvalBar from './components/EvalBar'
@@ -12,10 +12,8 @@ export default function App() {
   const [sharpnessBlack, setSharpnessBlack] = useState(null)
   const [isWhiteSharpnessStale, setIsWhiteSharpnessStale] = useState(false)
   const [isBlackSharpnessStale, setIsBlackSharpnessStale] = useState(false)
-  const [setupMode, setSetupMode] = useState(false)
   const [importedFen, setImportedFen] = useState('')
   const [maxDepth, setMaxDepth] = useState(10)
-  const boardRef = useRef(null)
 
   const clearAnalysis = () => {
     setEvalScore(null)
@@ -156,107 +154,76 @@ export default function App() {
           <span>High Sharpness</span>
         </div>
       </div>
-      <div style={{ marginTop: 20, textAlign: 'center' }}>
-        <label
-          htmlFor="depthSlider"
-          style={{ fontWeight: 'bold', display: 'block', marginBottom: 6 }}
-        >
-          Max Sharpness Depth: {maxDepth}
-        </label>
-        <input
-          id="depthSlider"
-          type="range"
-          min="4"
-          max="18"
-          value={maxDepth}
-          onChange={(e) => setMaxDepth(parseInt(e.target.value))}
-          style={{ width: 300 }}
-        />
-        <p style={{ fontSize: 12, color: 'orange', marginTop: 6 }}>
-          Higher depth values take significantly longer to compute.
-        </p>
-      </div>
 
-      <div style={{ marginTop: 20 }}>
-        <p>
-          <strong>Eval:</strong> {evalScore !== null ? evalScore : '…'}
-        </p>
-        <p>
-          <strong>Sharpness:</strong>
-        </p>
-        <ul>
-          <li>
-            White: {formatSharpness(sharpnessWhite, isWhiteSharpnessStale)}
-          </li>
-          <li>
-            Black: {formatSharpness(sharpnessBlack, isBlackSharpnessStale)}
-          </li>
-        </ul>
-      </div>
-
-      <button
-        onClick={() => {
-          if (!setupMode) {
-            setSetupMode(true)
-          } else {
-            const fen = game.fen().split(' ')
-            const newGame = new Chess(fen.join(' '))
-            setGame(newGame)
-            setSetupMode(false)
-            evaluateEval(newGame.fen())
-            evaluateSharpness(
-              newGame.fen(),
-              newGame.turn() === 'w' ? 'black' : 'white',
-              maxDepth
-            )
-          }
-          clearAnalysis()
-        }}
-      >
-        {setupMode ? 'Exit Setup Mode' : 'Enter Setup Mode'}
-      </button>
-
-      {!setupMode && (
-        <div style={{ marginTop: 20 }}>
-          <label htmlFor="fenInput">Import FEN: </label>
+      {/* Analysis Panel */}
+      <div style={{
+        width: 500,
+        margin: '30px auto 10px auto',
+        padding: 16,
+        backgroundColor: '#1e1e1e',
+        borderRadius: 8,
+        border: '1px solid #444',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <strong>Eval:</strong>
+          <span>{evalScore !== null ? evalScore : '…'}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <strong>Sharpness (White):</strong>
+          <span>{formatSharpness(sharpnessWhite, isWhiteSharpnessStale)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <strong>Sharpness (Black):</strong>
+          <span>{formatSharpness(sharpnessBlack, isBlackSharpnessStale)}</span>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label style={{ fontWeight: 'bold' }}>
+            Max Engine Depth: <span style={{ color: '#ccc' }}>{maxDepth}</span>
+          </label>
           <input
-            id="fenInput"
-            type="text"
-            placeholder="Paste FEN here"
-            style={{ width: 300 }}
-            onChange={(e) => setImportedFen(e.target.value)}
+            type="range"
+            min="4"
+            max="18"
+            value={maxDepth}
+            onChange={(e) => setMaxDepth(parseInt(e.target.value))}
+            style={{ width: '100%' }}
           />
-          <button
-            onClick={() => {
-              try {
-                const newGame = new Chess(importedFen)
-                setGame(newGame)
-                evaluateEval(newGame.fen())
-                evaluateSharpness(
-                  newGame.fen(),
-                  newGame.turn() === 'w' ? 'black' : 'white',
-                  maxDepth
-                )
-                clearAnalysis()
-              } catch (err) {
-                alert('Invalid FEN string')
-              }
-            }}
-          >
-            Load FEN
-          </button>
+          <p style={{ fontSize: 11, color: 'orange' }}>
+            Higher depth values take significantly longer to compute.
+          </p>
         </div>
-      )}
+      </div>
 
-      {setupMode && (
-        <div style={{ marginTop: 10 }}>
-          <label>Side to move: </label>
-          <select value={turn} onChange={(e) => setTurn(e.target.value)}>
-            <option value="w">White</option>
-            <option value="b">Black</option>
-          </select>
-        </div>
-      )}
+      <div style={{ marginTop: 30 }}>
+        <label htmlFor="fenInput">Import FEN: </label>
+        <input
+          id="fenInput"
+          type="text"
+          placeholder="Paste FEN here"
+          style={{ width: 300 }}
+          onChange={(e) => setImportedFen(e.target.value)}
+        />
+        <button
+          onClick={() => {
+            try {
+              const newGame = new Chess(importedFen)
+              setGame(newGame)
+              evaluateEval(newGame.fen())
+              evaluateSharpness(
+                newGame.fen(),
+                newGame.turn() === 'w' ? 'black' : 'white',
+                maxDepth
+              )
+              clearAnalysis()
+            } catch (err) {
+              alert('Invalid FEN string')
+            }
+          }}
+        >
+          Load FEN
+        </button>
+      </div>
     </div>
   )
 }
