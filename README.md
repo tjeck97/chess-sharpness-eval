@@ -71,25 +71,15 @@ You can paste any FEN into the app to analyze a position.
 
 ## 🔹 Example Positions
 
-### Example 1: Tactical Minefield
+### Example: White with an advantage and easier game
 
 ```
 r2qrb1k/1p4p1/p1bppn1p/8/4P3/1BN2N2/PPP3QP/1K3RR1 w - - 2 2
 ```
-
-* **Eval**: +2.51
-* **Sharpness**: White 30.09, Black 103.01
-* Interpretation: Black has more ways to go wrong. Even though White is winning, Black's defense is difficult.
-
-### Example 2: Calm Advantage
-
-```
-2rq1rk1/pp3ppp/1bnp1n2/8/3P4/2N1PN2/PP3PPP/R1BQR1K1 w - - 0 10
-```
-
-* **Eval**: +0.83
-* **Sharpness**: White 12.7, Black 14.3
-* Interpretation: Slight edge for White, but very playable for both sides.
+After Knight to H4: 
+* **Eval**: +2.86
+* **Sharpness**: White 42.19, Black 193.26
+* Interpretation: Black has difficult moves to find in order to survive
 
 ---
 
