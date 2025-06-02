@@ -19,8 +19,7 @@ of each position, and the divider within the bar represents the relative sharpne
 
 ## ⚔️ What Is Sharpness?
 
-**Sharpness** is a term intended to describe the *difficulty* of a position. In some ways, it can serve as a proxy estimate for how much time a player might spend 
-before making a move in a given position. 
+**Sharpness** is a term intended to describe the *difficulty* of a position. In many cases, it can serve as a proxy for how much time a player might spend thinking before making a move.
 
 Here, it's based on three core components:
 
