@@ -8,6 +8,8 @@ A minimalist chess evaluation app that analyzes positions using Stockfish and di
 Experienced chess players are able to identify "sharp" positions versus calm ones after studying a given position, and can even identify whether white or black has 
 the easier position to play. However, there haven't been many attempts to measure or quantify Sharpness. This project intends to calculate sharpness systematically.
 
+The traditional evaluation bar is displayed on the left side of the board, while the Sharpness bar appears on the right. The colors reflect the absolute sharpness 
+of each position, and the divider within the bar represents the relative sharpness between White and Black.
 
 <p align="center">
   <img src="frontend/src/assets/img.png" alt="Sharpness Eval Chess Screenshot" width="600"/>
@@ -15,7 +17,7 @@ the easier position to play. However, there haven't been many attempts to measur
 
 ---
 
-## ✨ What Is Sharpness?
+## ⚔️ What Is Sharpness?
 
 **Sharpness** is a term intended to describe the *difficulty* of a position. In some ways, it can serve as a proxy estimate for how much time a player might spend 
 before making a move in a given position. 
