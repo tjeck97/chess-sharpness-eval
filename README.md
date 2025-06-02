@@ -33,7 +33,7 @@ The formula (simplified) is:
 Sharpness = (1 / % good moves) * avg_depth * punishment_factor
 ```
 
-Values are capped at **500** for interpretability. A sharpness of 100+ usually indicates a tricky tactical position.
+Values are capped at **500** for interpretability. A sharpness of 250+ usually indicates a tricky tactical position.
 
 ---
 
