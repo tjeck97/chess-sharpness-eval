@@ -3,9 +3,9 @@ import chess.engine
 import os
 from typing import Tuple
 
-STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
-CP_THRESHOLD = 50
-MAX_DEPTH = 18
+STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"  # make this configurable
+CP_THRESHOLD = 50  # centipawn threshold for what is considered a "good" move
+MAX_DEPTH = 18  # engine depth
 MULTIPV = 10  # multi principle variation - number of top moves to output
 
 from functools import lru_cache
