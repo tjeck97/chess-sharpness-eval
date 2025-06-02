@@ -7,7 +7,7 @@ A minimalist chess evaluation app that analyzes positions using Stockfish and di
 
 Experienced chess players are able to identify "sharp" positions versus calm ones after studying a given position, and can even identify whether white or black has 
 the easier position to play. However, there haven't been many attempts to measure or quantify Sharpness. This project intends to calculate sharpness systematically.
-![img.png](src/assets/img.png)
+![img.png](frontend/src/assets/img.png)
 ---
 
 ## ✨ What Is Sharpness?
