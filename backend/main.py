@@ -15,9 +15,9 @@ app.add_middleware(
 )
 
 @app.get("/api/eval")
-def compute_eval(fen: str = Query(...)):
+def compute_eval(fen: str = Query(...), depth: int = Query(MAX_DEPTH)):
     try:
-        eval_pawns, turn = get_eval(fen)
+        eval_pawns, turn = get_eval(fen, depth)
         return {"eval": eval_pawns, "turn": turn}
     except FileNotFoundError as e:
         return {"error": str(e)}

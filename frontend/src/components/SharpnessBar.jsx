@@ -1,5 +1,5 @@
 export default function SharpnessBar({ sharpnessWhite, sharpnessBlack }) {
-  const MAX_SHARPNESS = 500
+  const MAX_SHARPNESS = 1000
 
   const normalize = (value) => Math.max(0, Math.min(1, value / MAX_SHARPNESS))
 

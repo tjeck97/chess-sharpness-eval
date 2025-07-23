@@ -14,6 +14,10 @@ export default function App() {
   const [isBlackSharpnessStale, setIsBlackSharpnessStale] = useState(false)
   const [importedFen, setImportedFen] = useState('')
   const [maxDepth, setMaxDepth] = useState(10)
+  const [history, setHistory] = useState([
+    { fen: game.fen(), turn: game.turn() }
+  ])
+  const [historyIndex, setHistoryIndex] = useState(0)
 
   const clearAnalysis = () => {
     setEvalScore(null)
@@ -23,10 +27,10 @@ export default function App() {
     setIsBlackSharpnessStale(false)
   }
 
-  const evaluateEval = (fen) => {
+  const evaluateEval = (fen, depth) => {
     const encodedFen = encodeURIComponent(fen)
     axios
-      .get(`/api/eval?fen=${encodedFen}`)
+      .get(`/api/eval?fen=${encodedFen}&depth=${depth}`)
       .then((res) => setEvalScore(res.data.eval))
       .catch((err) => console.error('Eval API error:', err))
   }
@@ -48,27 +52,53 @@ export default function App() {
   }
 
   const makeMove = async (move) => {
+    const prevTurn = game.turn() // who's about to move (before move is made)
     const gameCopy = new Chess(game.fen())
     const result = gameCopy.move(move)
 
-    if (result) {
-      const prevTurn = game.turn()
-      const fen = gameCopy.fen()
-      setGame(gameCopy)
+    if (!result) return false
 
-      if (prevTurn === 'w') {
-        setIsBlackSharpnessStale(true)
-        evaluateSharpness(fen, 'white', maxDepth)
-      } else {
-        setIsWhiteSharpnessStale(true)
-        evaluateSharpness(fen, 'black', maxDepth)
-      }
+    const fen = gameCopy.fen()
+    const newTurn = gameCopy.turn() // who's turn it is after move
+    setGame(gameCopy)
+    setHistoryIndex((prev) => prev + 1)
 
-      evaluateEval(fen)
-      return true
-    }
+    const [evalRes, sharpnessRes] = await Promise.all([
+      axios
+        .get(`/api/eval?fen=${encodeURIComponent(fen)}&depth=${maxDepth}`)
+        .then((res) => res.data.eval)
+        .catch(() => null),
+      axios
+        .get(`/api/sharpness?fen=${encodeURIComponent(fen)}&depth=${maxDepth}`)
+        .then((res) => res.data.sharpness)
+        .catch(() => null)
+    ])
 
-    return false
+    const newHistoryEntry =
+      prevTurn === 'w'
+        ? {
+            fen,
+            turn: newTurn,
+            eval: evalRes,
+            sharpnessWhite,
+            sharpnessBlack: sharpnessRes // White just moved
+          }
+        : {
+            fen,
+            turn: newTurn,
+            eval: evalRes,
+            sharpnessWhite: sharpnessRes, // Black just moved
+            sharpnessBlack
+          }
+
+    setHistory((prev) => [...prev.slice(0, historyIndex + 1), newHistoryEntry])
+    setEvalScore(evalRes)
+    setSharpnessWhite(newHistoryEntry.sharpnessWhite)
+    setSharpnessBlack(newHistoryEntry.sharpnessBlack)
+    setIsWhiteSharpnessStale(false)
+    setIsBlackSharpnessStale(false)
+
+    return true
   }
 
   const formatSharpness = (val, isStale) => {
@@ -79,6 +109,48 @@ export default function App() {
     navigator.clipboard.writeText(game.fen()).then(() => {
       alert('FEN copied to clipboard!')
     })
+  }
+
+  const goBackward = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1
+      const {
+        fen,
+        eval: evalVal,
+        sharpnessWhite,
+        sharpnessBlack
+      } = history[newIndex]
+
+      const gameCopy = new Chess(fen)
+      setGame(gameCopy)
+      setHistoryIndex(newIndex)
+      setEvalScore(evalVal)
+      setSharpnessWhite(sharpnessWhite)
+      setSharpnessBlack(sharpnessBlack)
+      setIsWhiteSharpnessStale(false)
+      setIsBlackSharpnessStale(false)
+    }
+  }
+
+  const goForward = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1
+      const {
+        fen,
+        eval: evalVal,
+        sharpnessWhite,
+        sharpnessBlack
+      } = history[newIndex]
+
+      const gameCopy = new Chess(fen)
+      setGame(gameCopy)
+      setHistoryIndex(newIndex)
+      setEvalScore(evalVal)
+      setSharpnessWhite(sharpnessWhite)
+      setSharpnessBlack(sharpnessBlack)
+      setIsWhiteSharpnessStale(false)
+      setIsBlackSharpnessStale(false)
+    }
   }
 
   return (
@@ -127,44 +199,60 @@ export default function App() {
         />
       </div>
 
-      {/* Sharpness Key */}
-      <div style={{ marginTop: 20, textAlign: 'center' }}>
-        <div
-          style={{
-            width: 160,
-            height: 12,
-            borderRadius: 6,
-            background:
-              'linear-gradient(to right, rgb(50, 200, 50), rgb(220, 220, 80), rgb(255, 165, 70), rgb(230, 80, 60), rgb(180, 60, 120))',
-            margin: '0 auto 4px auto',
-            border: '1px solid #ccc'
-          }}
-        />
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            width: 160,
-            margin: '0 auto',
-            fontSize: 12,
-            color: 'white'
-          }}
-        >
-          <span>Low Sharpness</span>
-          <span>High Sharpness</span>
+      {/* Sharpness Key + Arrows */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: 20,
+          gap: 20
+        }}
+      >
+        <button onClick={goBackward}>←</button>
+
+        <div style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              width: 160,
+              height: 12,
+              borderRadius: 6,
+              background:
+                'linear-gradient(to right, rgb(50, 200, 50), rgb(220, 220, 80), rgb(255, 165, 70), rgb(230, 80, 60), rgb(180, 60, 120))',
+              margin: '0 auto 4px auto',
+              border: '1px solid #ccc'
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              width: 160,
+              margin: '0 auto',
+              fontSize: 12,
+              color: 'white'
+            }}
+          >
+            <span>Low Sharpness</span>
+            <span>High Sharpness</span>
+          </div>
         </div>
+
+        <button onClick={goForward}>→</button>
       </div>
 
       {/* Analysis Panel */}
-      <div style={{
-        width: 500,
-        margin: '30px auto 10px auto',
-        padding: 16,
-        backgroundColor: '#1e1e1e',
-        borderRadius: 8,
-        border: '1px solid #444',
-        boxSizing: 'border-box'
-      }}>
+      <div
+        style={{
+          width: 500,
+          margin: '30px auto 10px auto',
+          padding: 16,
+          backgroundColor: '#1e1e1e',
+          borderRadius: 8,
+          border: '1px solid #444',
+          boxSizing: 'border-box'
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>Eval:</strong>
           <span>{evalScore !== null ? evalScore : '…'}</span>
@@ -209,7 +297,7 @@ export default function App() {
             try {
               const newGame = new Chess(importedFen)
               setGame(newGame)
-              evaluateEval(newGame.fen())
+              evaluateEval(newGame.fen(), maxDepth)
               evaluateSharpness(
                 newGame.fen(),
                 newGame.turn() === 'w' ? 'black' : 'white',

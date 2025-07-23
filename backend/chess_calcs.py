@@ -1,6 +1,7 @@
 import chess
 import chess.engine
 import os
+import math
 from typing import Tuple
 
 STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"  # make this configurable
@@ -10,14 +11,14 @@ MULTIPV = 10  # multi principle variation - number of top moves to output
 
 from functools import lru_cache
 
-def get_eval(fen: str) -> Tuple[float, str]:
+def get_eval(fen: str, depth: int) -> Tuple[float, str]:
     board = chess.Board(fen)
     if not os.path.exists(STOCKFISH_PATH):
         raise FileNotFoundError("Stockfish not found at path.")
 
     with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
         # keep multipv here at 1
-        info = engine.analyse(board, chess.engine.Limit(depth=MAX_DEPTH), multipv=1)
+        info = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=1)
         eval_cp = info[0]["score"].white().score(mate_score=10000)
         eval_pawns = eval_cp / 100 if eval_cp is not None else None
         turn = "white" if board.turn == chess.WHITE else "black"
@@ -42,11 +43,11 @@ def cached_analysis(fen: str, depth: int) -> list[chess.engine.InfoDict]:
         return engine.analyse(board, chess.engine.Limit(depth=depth), multipv=MULTIPV)
 
 
-def resolve_move_quality_depth(board: chess.Board, move: chess.Move, max_depth: int = MAX_DEPTH) -> Tuple[int, str]:
+def resolve_move_quality_depth(board: chess.Board, move: chess.Move, depth: int = MAX_DEPTH) -> Tuple[int, str]:
     fen = board.fen()
 
     # Get ground-truth label at max depth
-    max_info = cached_analysis(fen, max_depth)
+    max_info = cached_analysis(fen, depth)
     max_top_score = max_info[0]["score"].relative.score(mate_score=10000)
     ground_truth_score = None
 
@@ -56,13 +57,13 @@ def resolve_move_quality_depth(board: chess.Board, move: chess.Move, max_depth: 
             break
 
     if ground_truth_score is None:
-        print(f"[WARN] Move {board.san(move)} not found at depth {max_depth}")
-        return max_depth + 1, "UNKNOWN"
+        print(f"[WARN] Move {board.san(move)} not found at depth {depth}")
+        return depth + 1, "UNKNOWN"
 
     delta_gt = abs(ground_truth_score - max_top_score)
     is_good_move = delta_gt <= CP_THRESHOLD
 
-    # Assign readable label (UI/debug only)
+    # Assign readable label
     if delta_gt == 0:
         true_label = "BEST"
     elif delta_gt <= CP_THRESHOLD:
@@ -77,8 +78,8 @@ def resolve_move_quality_depth(board: chess.Board, move: chess.Move, max_depth: 
         true_label = "MASSIVE BLUNDER"
 
     # Search for first depth where engine gets move on correct side of good/bad split
-    for depth in range(1, max_depth + 1):
-        info = cached_analysis(fen, depth)
+    for depth_level in range(1, depth + 1):
+        info = cached_analysis(fen, depth_level)
         top_score = info[0]["score"].relative.score(mate_score=10000)
 
         for entry in info:
@@ -91,31 +92,30 @@ def resolve_move_quality_depth(board: chess.Board, move: chess.Move, max_depth: 
 
 
             if found_good == is_good_move:
-                return depth, true_label
+                return depth_level, true_label
 
-    return max_depth + 1, true_label
+    return depth + 1, true_label
 
 
 
 def compute_sharpness(engine, board: chess.Board, depth: int):
     try:
-        info = engine.analyse(board, chess.engine.Limit(depth=MAX_DEPTH), multipv=MULTIPV)
+        info = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=MULTIPV)
     except Exception as e:
         print(f"[ERROR] Engine error: {e}")
         return 0.0, None
 
     num_legal_moves = board.legal_moves.count()
-    top_score = info[0]["score"].relative.score(mate_score=10000)
-    top_move = info[0]["pv"][0] if info[0].get("pv") else None
+    if num_legal_moves == 0:
+        return 0.0, None
 
-    # depths at which moves were revealed to be good or bad
-    good_move_depths = []
-    bad_move_depths = []
+    top_score = info[0]["score"].relative.score(mate_score=10000)
 
     print("\n===== SHARPNESS DEBUG LOG =====")
     print("\n[TOP 10 MOVES CONSIDERED]")
 
     top_moves = []
+    top_move_depths = []
 
     for i, entry in enumerate(info):
         move = entry["pv"][0] if entry.get("pv") else None
@@ -128,10 +128,7 @@ def compute_sharpness(engine, board: chess.Board, depth: int):
 
         depth_revealed, label = resolve_move_quality_depth(board, move, depth)
 
-        if label in ("BEST", "GOOD"):
-            good_move_depths.append(depth_revealed)
-        elif label in ("INACCURACY", "MISTAKE", "BLUNDER", "MASSIVE BLUNDER"):
-            bad_move_depths.append(depth_revealed)
+        top_move_depths.append(depth_revealed)
 
         top_moves.append({
             "move": move_san,
@@ -144,46 +141,49 @@ def compute_sharpness(engine, board: chess.Board, depth: int):
 
         print(f"[#{i+1}] {move_san:<6} | score={score:>4} | Δ={delta:<4} | {label} → depth={depth_revealed}")
 
-    # If no revealing depth found, use fallback
-    if not good_move_depths and not bad_move_depths:
-        print(f"[RESULT] No revealing moves → Sharpness=0.00")
-        return 0.0, top_move
-
-    avg_good_depth = sum(good_move_depths) / len(good_move_depths) if good_move_depths else 1
-    avg_bad_depth = sum(bad_move_depths) / len(bad_move_depths) if bad_move_depths else 1
-
+    top_moves_depth = sum(top_move_depths) / len(top_move_depths) if top_move_depths else 1
 
 
     # how difficult is it to discern good from bad moves?
-    depth_difficulty = (avg_good_depth + avg_bad_depth) / 2
+    depth_difficulty_ratio = top_moves_depth / depth  # compared to the max, how deep is this position
 
-    # how many good moves are there out of the legal ones?
-    scarcity = len(good_move_depths) / num_legal_moves
+    # ----- logarithmic difficulty curve -----
+    # depth_difficulty_ratio = 1/3 --> difficulty = 0.60
+    # depth_difficulty_ratio = 1/2 --> difficulty = 0.78
+    # depth_difficulty_ratio = 4/5 --> difficulty = 0.95
+    depth_difficulty = max(0.1, math.log10(9 * depth_difficulty_ratio + 1))
 
     # how big is the drop-off if we fail to play a good move?
     # Compute dropoff severity
     good_scores = [m["score"] for m in top_moves if m["label"] in ("BEST", "GOOD")]
     bad_scores = [m["score"] for m in top_moves if m["label"] not in ("BEST", "GOOD")]
 
+    # how many good moves are there out of the legal ones?
+    scarcity = max(0.1, 1 - (len(good_scores) / num_legal_moves))
+
     if good_scores and bad_scores:
-        worst_good_score = min(good_scores)
-        best_bad_score = max(bad_scores)
-        dropoff_cp = min(1000, worst_good_score - best_bad_score)
-        dropoff_factor = 1 + (dropoff_cp / 200)
+        avg_good_score = sum(good_scores)/len(good_scores)
+        avg_bad_score = sum(bad_scores)/len(bad_scores)
+        dropoff_cp = min(999, avg_good_score - avg_bad_score)
+        dropoff_factor = max(0.1, dropoff_cp/1000)
     else:
         dropoff_factor = 1
 
-    raw_sharpness = 1/scarcity * depth_difficulty * dropoff_factor
-
-    sharpness = round(min(raw_sharpness, 500), 2)
+    raw_sharpness = scarcity * depth_difficulty * dropoff_factor # 0-1
+    curved_sharpness = math.log10(9 * raw_sharpness + 1)
+    # apply log curve based on depth_difficulty
+    gated_sharpness = raw_sharpness * (1 - depth_difficulty) + curved_sharpness * depth_difficulty
+    sharpness_score = round(1000 * gated_sharpness, 2)
 
     print("\n[SUMMARY]")
-    print(f"- Good moves: {len(good_move_depths)}")
+    print(f"- Good moves: {len(good_scores)}")
     print(f"- Legal move count: {num_legal_moves}")
-    print(f"- Avg good move depth: {avg_good_depth:.2f}")
-    print(f"- Avg bad move depth: {avg_bad_depth:.2f}")
-    print(f"- dropoff factor: {dropoff_factor:.2f}")
+    print(f"- Scarcity score: {scarcity:.2f}")
+    print(f"- Avg top move depth: {top_moves_depth:.2f}")
+    print(f"- Depth difficulty score: {depth_difficulty:.2f}")
+    print(f"- Dropoff score: {dropoff_factor:.2f}")
     print(f"- Raw sharpness score: {raw_sharpness:.2f}")
+    print(f"- Final sharpness score: {sharpness_score:.2f}")
     print("====================================\n")
 
-    return sharpness, top_moves
+    return sharpness_score, top_moves
