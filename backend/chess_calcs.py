@@ -43,6 +43,56 @@ def cached_analysis(fen: str, depth: int) -> list[chess.engine.InfoDict]:
         return engine.analyse(board, chess.engine.Limit(depth=depth), multipv=MULTIPV)
 
 
+def compute_depth_difficulty(engine, board, depth):
+    top_moves = []
+    try:
+        info = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=MULTIPV)
+    except Exception as e:
+        print(f"[ERROR] Engine error: {e}")
+        return 0.0, None
+
+    top_score = info[0]["score"].relative.score(mate_score=10000)
+    top_move_depths = []
+
+    for i, entry in enumerate(info):
+        move = entry["pv"][0] if entry.get("pv") else None
+        if not move:
+            continue
+
+        move_san = board.san(move)
+        score = entry["score"].relative.score(mate_score=10000)
+        delta = abs(score - top_score)
+
+        depth_revealed, label = resolve_move_quality_depth(board, move, depth)
+
+        top_move_depths.append(depth_revealed)
+
+        top_moves.append({
+            "move": move_san,
+            "score": score,
+            "delta": delta,
+            "label": label,
+            "depthResolved": depth_revealed,
+            "multipv": i + 1
+        })
+
+        print(f"[#{i+1}] {move_san:<6} | score={score:>4} | Δ={delta:<4} | {label} → depth={depth_revealed}")
+
+    top_moves_depth = sum(top_move_depths) / len(top_move_depths) if top_move_depths else 1
+
+
+    # how difficult is it to discern good from bad moves?
+    depth_difficulty_ratio = top_moves_depth / depth  # compared to the max, how deep is this position
+
+    # ----- logarithmic difficulty curve -----
+    # depth_difficulty_ratio = 1/3 --> difficulty = 0.60
+    # depth_difficulty_ratio = 1/2 --> difficulty = 0.78
+    # depth_difficulty_ratio = 4/5 --> difficulty = 0.95
+    depth_difficulty = max(0.1, math.log10(9 * depth_difficulty_ratio + 1))
+
+    return depth_difficulty, top_moves
+
+
 def resolve_move_quality_depth(board: chess.Board, move: chess.Move, depth: int = MAX_DEPTH) -> Tuple[int, str]:
     fen = board.fen()
 
@@ -99,59 +149,15 @@ def resolve_move_quality_depth(board: chess.Board, move: chess.Move, depth: int 
 
 
 def compute_sharpness(engine, board: chess.Board, depth: int):
-    try:
-        info = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=MULTIPV)
-    except Exception as e:
-        print(f"[ERROR] Engine error: {e}")
-        return 0.0, None
 
     num_legal_moves = board.legal_moves.count()
     if num_legal_moves == 0:
         return 0.0, None
 
-    top_score = info[0]["score"].relative.score(mate_score=10000)
-
     print("\n===== SHARPNESS DEBUG LOG =====")
     print("\n[TOP 10 MOVES CONSIDERED]")
 
-    top_moves = []
-    top_move_depths = []
-
-    for i, entry in enumerate(info):
-        move = entry["pv"][0] if entry.get("pv") else None
-        if not move:
-            continue
-
-        move_san = board.san(move)
-        score = entry["score"].relative.score(mate_score=10000)
-        delta = abs(score - top_score)
-
-        depth_revealed, label = resolve_move_quality_depth(board, move, depth)
-
-        top_move_depths.append(depth_revealed)
-
-        top_moves.append({
-            "move": move_san,
-            "score": score,
-            "delta": delta,
-            "label": label,
-            "depthResolved": depth_revealed,
-            "multipv": i + 1
-        })
-
-        print(f"[#{i+1}] {move_san:<6} | score={score:>4} | Δ={delta:<4} | {label} → depth={depth_revealed}")
-
-    top_moves_depth = sum(top_move_depths) / len(top_move_depths) if top_move_depths else 1
-
-
-    # how difficult is it to discern good from bad moves?
-    depth_difficulty_ratio = top_moves_depth / depth  # compared to the max, how deep is this position
-
-    # ----- logarithmic difficulty curve -----
-    # depth_difficulty_ratio = 1/3 --> difficulty = 0.60
-    # depth_difficulty_ratio = 1/2 --> difficulty = 0.78
-    # depth_difficulty_ratio = 4/5 --> difficulty = 0.95
-    depth_difficulty = max(0.1, math.log10(9 * depth_difficulty_ratio + 1))
+    depth_difficulty, top_moves = compute_depth_difficulty(engine, board, depth)
 
     # how big is the drop-off if we fail to play a good move?
     # Compute dropoff severity
@@ -176,10 +182,10 @@ def compute_sharpness(engine, board: chess.Board, depth: int):
     sharpness_score = round(1000 * gated_sharpness, 2)
 
     print("\n[SUMMARY]")
+    print(f"- Turn to move: {'White' if board.turn == chess.WHITE else 'Black'}")
     print(f"- Good moves: {len(good_scores)}")
     print(f"- Legal move count: {num_legal_moves}")
     print(f"- Scarcity score: {scarcity:.2f}")
-    print(f"- Avg top move depth: {top_moves_depth:.2f}")
     print(f"- Depth difficulty score: {depth_difficulty:.2f}")
     print(f"- Dropoff score: {dropoff_factor:.2f}")
     print(f"- Raw sharpness score: {raw_sharpness:.2f}")
