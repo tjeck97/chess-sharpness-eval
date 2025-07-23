@@ -157,6 +157,8 @@ def compute_sharpness(engine, board: chess.Board, depth: int):
     print("\n===== SHARPNESS DEBUG LOG =====")
     print("\n[TOP 10 MOVES CONSIDERED]")
 
+
+    # how difficult to find are the top moves?
     depth_difficulty, top_moves = compute_depth_difficulty(engine, board, depth)
 
     # how big is the drop-off if we fail to play a good move?
@@ -176,7 +178,7 @@ def compute_sharpness(engine, board: chess.Board, depth: int):
         dropoff_factor = 1
 
     raw_sharpness = scarcity * depth_difficulty * dropoff_factor # 0-1
-    curved_sharpness = math.log10(9 * raw_sharpness + 1)
+    curved_sharpness = math.log10(9 * raw_sharpness + 1) # log boosted 0-1
     # apply log curve based on depth_difficulty
     gated_sharpness = raw_sharpness * (1 - depth_difficulty) + curved_sharpness * depth_difficulty
     sharpness_score = round(1000 * gated_sharpness, 2)
